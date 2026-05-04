@@ -23,8 +23,10 @@ import { engleGranger } from "@/lib/math/cointegration";
 import { rollingZScore } from "@/lib/math/zscore";
 import { fitOu } from "@/lib/math/ou";
 import { rollingAdf } from "@/lib/math/adf";
+import { bertramSurface, bertramOptimal } from "@/lib/math/bertram";
 import { pairAmihud } from "@/lib/risk/sizing";
 import { correlation } from "@/lib/math/stats";
+import Link from "next/link";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Stat } from "@/components/ui/Stat";
 import { Badge } from "@/components/ui/Badge";
@@ -40,7 +42,7 @@ function downsample<T>(arr: T[], target = 360): T[] {
   return out;
 }
 
-type ChartTab = "prices" | "beta" | "spread" | "zscore" | "adfwin" | "dist";
+type ChartTab = "prices" | "beta" | "spread" | "zscore" | "adfwin" | "dist" | "bertram";
 
 const TAB_OPTIONS: ReadonlyArray<{ value: ChartTab; label: string }> = [
   { value: "prices", label: "Prices" },
@@ -49,20 +51,18 @@ const TAB_OPTIONS: ReadonlyArray<{ value: ChartTab; label: string }> = [
   { value: "zscore", label: "Z-score" },
   { value: "adfwin", label: "Rolling ADF" },
   { value: "dist", label: "Distribution" },
+  { value: "bertram", label: "Bertram bands" },
 ];
 
 const tone = (tag: PairSpec["tag"]): "good" | "info" | "neutral" | "bad" | "accent" => {
   switch (tag) {
-    case "Strong":
-      return "good";
-    case "Moderate":
-      return "info";
-    case "Weak":
-      return "accent";
-    case "Broken":
-      return "bad";
-    case "Independent":
-      return "neutral";
+    case "Strong": return "good";
+    case "Moderate": return "info";
+    case "Weak": return "accent";
+    case "Volatile": return "accent";
+    case "Slow": return "neutral";
+    case "Broken": return "bad";
+    case "Independent": return "neutral";
   }
 };
 
@@ -124,8 +124,11 @@ export function PairLab() {
     const corr = correlation(pair.a.logReturns, pair.b.logReturns);
     const amihud = pairAmihud(pair);
 
+    const bertSurface = bertramSurface(ouFit.theta, ouFit.sigmaOu, 0.0008);
+    const bertOpt = bertramOptimal(ouFit.theta, ouFit.sigmaOu, 0.0008);
     return {
       eg, fullOls, ouFit, rows: downsample(rows, 480), histogram, corr, amihud,
+      bertSurface, bertOpt,
     };
   }, [pair, zWindow, hedgeWindow]);
 
@@ -140,7 +143,9 @@ export function PairLab() {
           Pick a pair from the deck below. The Lab recomputes the cointegration
           test, hedge ratios from three estimators, the rolling spread, the
           z-score signal, the OU half-life and an Amihud illiquidity score —
-          all client-side, on every change.
+          all client-side, on every change. For KPSS, VR, Hurst, CUSUM and
+          Johansen on the same pair, see{" "}
+          <Link href="/methods" className="text-(--color-accent) underline-offset-2 hover:underline">/methods</Link>.
         </p>
       </header>
 
@@ -341,7 +346,7 @@ export function PairLab() {
                   <Line type="monotone" dataKey="adfP" name="rolling ADF p (252-bar)"
                     stroke="var(--color-info)" strokeWidth={1.3} dot={false} isAnimationActive={false} />
                 </LineChart>
-              ) : (
+              ) : tab === "dist" ? (
                 <BarChart data={computed.histogram} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
                   <XAxis dataKey="z" tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)} />
@@ -349,6 +354,18 @@ export function PairLab() {
                   <Tooltip />
                   <Bar dataKey="count" fill="var(--color-accent)" />
                 </BarChart>
+              ) : (
+                <LineChart data={computed.bertSurface} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+                  <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                  <XAxis dataKey="a" tick={{ fontSize: 10 }} tickFormatter={(v: number) => v.toFixed(1)}
+                    label={{ value: "entry threshold a (σ_OU units)", position: "insideBottom", offset: -2, fill: "var(--color-fg-muted)", fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <ReferenceLine x={computed.bertOpt.entry} stroke="var(--color-accent)" strokeDasharray="3 3"
+                    label={{ value: `a* = ${computed.bertOpt.entry.toFixed(2)}σ`, position: "top", fill: "var(--color-accent)", fontSize: 10 }} />
+                  <Line type="monotone" dataKey="profit" stroke="var(--color-info)" strokeWidth={1.4} dot={false} isAnimationActive={false}
+                    name="expected return / unit time" />
+                </LineChart>
               )}
             </ResponsiveContainer>
           </div>
@@ -361,6 +378,7 @@ export function PairLab() {
               {tab === "zscore" && "Standardised spread. Bands at ±2σ and ±4σ — typical entry and stop-loss thresholds."}
               {tab === "adfwin" && "Rolling 252-bar ADF p-value on the residual. A spike above 0.05 is a regime warning."}
               {tab === "dist" && "Empirical distribution of the z-score. Heavy tails imply your z-stop matters."}
+              {tab === "bertram" && `Bertram (2010) closed-form expected return per unit time as a function of entry threshold, given the fitted OU and a fixed cost. Optimum a* ≈ ${computed.bertOpt.entry.toFixed(2)}σ_OU.`}
             </div>
             <div>
               <span className="font-mono text-(--color-fg-faint)">truth:</span>{" "}

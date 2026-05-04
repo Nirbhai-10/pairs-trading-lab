@@ -158,6 +158,106 @@ const TERMS: Term[] = [
     cat: "stats",
     body: <>Fit on training window; record performance on held-out test window; roll forward. The Lab uses rolling estimation as a lighter equivalent.</>,
   },
+  {
+    t: "KPSS test",
+    short: "Tests stationarity directly (opposite null to ADF).",
+    cat: "stats",
+    body: (
+      <>
+        η = T<sup>−2</sup> Σ S<sub>t</sub><sup>2</sup> / σ̂<sup>2</sup><sub>∞</sub>. Critical value 0.463 at 5% (level case). Pair worth trading: ADF rejects AND KPSS fails to reject.
+      </>
+    ),
+  },
+  {
+    t: "Variance Ratio",
+    short: "Lo-MacKinlay test for departures from a random walk.",
+    cat: "stats",
+    body: <>VR(q) = Var(q-period sum) / (q · Var(1-period)). VR &lt; 1 ⇒ mean reverting; VR &gt; 1 ⇒ momentum.</>,
+  },
+  {
+    t: "Hurst exponent",
+    short: "Slope of log(R/S) vs log(n).",
+    cat: "stats",
+    body: <>H ≈ 0.5 random walk, H &lt; 0.5 mean reverting, H &gt; 0.5 trending. Tradable pairs typically show H in [0.30, 0.45].</>,
+  },
+  {
+    t: "CUSUM",
+    short: "Brown-Durbin-Evans test for parameter stability.",
+    cat: "stats",
+    body: <>Cumulative recursive residuals; under H0 it&apos;s a Brownian motion. Crossing ±a√T means the relationship has shifted.</>,
+  },
+  {
+    t: "Johansen test",
+    short: "Multivariate cointegration test.",
+    cat: "stats",
+    body: <>Trace and max-eigenvalue stats from the rank of Π in the VECM ΔY = ΠY<sub>−1</sub> + Σ Γ<sub>i</sub>ΔY<sub>−i</sub> + ε. Correct generalisation of Engle-Granger to k ≥ 3 variables.</>,
+  },
+  {
+    t: "VECM",
+    short: "Vector error-correction model.",
+    cat: "model",
+    body: <>Once cointegration is detected, the VECM gives loadings α: how fast each leg adjusts back toward equilibrium. Tells you which leg leads the spread.</>,
+  },
+  {
+    t: "Distance method",
+    short: "Gatev-Goetzmann-Rouwenhorst empirical pairs strategy.",
+    cat: "model",
+    body: <>Normalise prices, compute SSD over a formation window, trade on ±2σ divergences in the trading window. No β, no ADF, fully empirical.</>,
+  },
+  {
+    t: "s-score",
+    short: "Avellaneda-Lee equilibrium standardisation.",
+    cat: "model",
+    body: <>s = (X − μ<sub>OU</sub>) / σ<sub>OU</sub> using OU-fitted parameters rather than rolling moments. Trade when |s| ≥ 1.25, close at ≤ 0.5.</>,
+  },
+  {
+    t: "VaR / CVaR",
+    short: "α-quantile of return distribution / mean of the tail beyond.",
+    cat: "risk",
+    body: <>CVaR is the coherent risk measure VaR isn&apos;t. The Risk Lab reports both at 95% and 99%.</>,
+  },
+  {
+    t: "Ulcer Index",
+    short: "Path-aware drawdown statistic.",
+    cat: "risk",
+    body: <>√(mean(DD<sub>t</sub><sup>2</sup>)). Captures depth and duration of drawdowns; smoother than max DD.</>,
+  },
+  {
+    t: "Pain ratio",
+    short: "Annual return / Ulcer Index.",
+    cat: "risk",
+    body: <>Smoother Calmar; correlates better with subjective discomfort than the more common single-DD ratios.</>,
+  },
+  {
+    t: "Sterling ratio",
+    short: "Annual return / average annual max drawdown.",
+    cat: "risk",
+    body: <>Average of yearly drawdowns rather than the global max — robust to a single bad year skewing the headline number.</>,
+  },
+  {
+    t: "Information ratio",
+    short: "Active-return mean / tracking error.",
+    cat: "risk",
+    body: <>Goodwin (1998). When benchmark = market, this is the right metric for evaluating sector-neutral pairs against passive long-only.</>,
+  },
+  {
+    t: "Stationary bootstrap",
+    short: "Politis-Romano resampling with random-length blocks.",
+    cat: "stats",
+    body: <>Geometric block lengths preserve serial dependence so Sharpe / total-return CIs are honest under autocorrelation.</>,
+  },
+  {
+    t: "Bertram bands",
+    short: "Closed-form OU optimal entry/exit thresholds.",
+    cat: "model",
+    body: <>Bertram (2010) maximises (2aσ − cost) / E[T(a)] for an OU spread with fixed cost. The Pair Lab plots the surface.</>,
+  },
+  {
+    t: "Capacity",
+    short: "Maximum tradable size before impact eats the edge.",
+    cat: "execution",
+    body: <>Conservative proxy used in Portfolio: 1% of mean dollar volume on the worse leg. Real-money sizing should use Almgren-Chriss square-root impact.</>,
+  },
 ];
 
 const CATS = {

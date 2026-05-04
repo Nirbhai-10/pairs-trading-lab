@@ -24,6 +24,8 @@ import {
   type HedgeModel,
   type SizingMode,
 } from "@/lib/backtest/engine";
+import { stationaryBootstrap } from "@/lib/risk/bootstrap";
+import { conditionalVaR } from "@/lib/risk/metrics";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Stat } from "@/components/ui/Stat";
 import { Slider } from "@/components/ui/Slider";
@@ -100,6 +102,59 @@ export function BacktestStudio() {
     }
     return out;
   }, [safeResult]);
+
+  // Heatmap of average trade P&L by entry-z bucket × holding-period bucket.
+  const tradeHeat = useMemo(() => {
+    if (!safeResult || safeResult.trades.length === 0) return null;
+    const zBuckets = [-Infinity, -3, -2.5, -2, 2, 2.5, 3, Infinity];
+    const zLabels  = ["≤−3", "−3..−2.5", "−2.5..−2", "−2..0", "0..2", "2..2.5", "2.5..3", "≥3"];
+    const hBuckets = [0, 5, 10, 20, 40, Infinity];
+    const hLabels  = ["≤5", "6–10", "11–20", "21–40", "41+"];
+    const grid: { count: number; total: number }[][] = [];
+    for (let i = 0; i < zLabels.length; i++) {
+      grid.push(hLabels.map(() => ({ count: 0, total: 0 })));
+    }
+    for (const t of safeResult.trades) {
+      const z = t.entryZ;
+      let zi = 0;
+      for (let i = 0; i < zBuckets.length - 1; i++) {
+        if (z > zBuckets[i] && z <= zBuckets[i + 1]) { zi = i; break; }
+      }
+      let hi = 0;
+      for (let i = 0; i < hBuckets.length - 1; i++) {
+        if (t.bars > hBuckets[i] && t.bars <= hBuckets[i + 1]) { hi = i; break; }
+      }
+      grid[zi][hi].count++;
+      grid[zi][hi].total += t.pnlFrac;
+    }
+    return { grid, zLabels, hLabels };
+  }, [safeResult]);
+
+  // Stationary-bootstrap CI on Sharpe.
+  const boot = useMemo(() => {
+    if (!safeResult) return null;
+    return stationaryBootstrap(safeResult.dailyReturn, 300, 21, "backtest-bootstrap");
+  }, [safeResult]);
+
+  // Buy-and-hold benchmark on leg A and on the equally-weighted long-only book.
+  const benchmark = useMemo(() => {
+    if (!safeResult) return [] as { date: string; bt: number; bnh: number; eql: number }[];
+    const bnh = pair.a.prices.map((p) => p / pair.a.prices[0]);
+    const eql = pair.a.prices.map(
+      (p, i) => 0.5 * (p / pair.a.prices[0]) + 0.5 * (pair.b.prices[i] / pair.b.prices[0]),
+    );
+    return downsample(
+      pair.a.dates.map((d, i) => ({
+        date: d,
+        bt: safeResult.equity[i],
+        bnh: bnh[i],
+        eql: eql[i],
+      })),
+      480,
+    );
+  }, [pair, safeResult]);
+
+  const cvar95 = useMemo(() => (safeResult ? conditionalVaR(safeResult.dailyReturn, 0.05) : 0), [safeResult]);
 
   const update = <K extends keyof BacktestParams>(k: K, v: BacktestParams[K]) =>
     setParams((p) => ({ ...p, [k]: v }));
@@ -308,23 +363,37 @@ export function BacktestStudio() {
                 <Stat label="Hit rate" value={pct(finalResult.metrics.hitRate, 1)} />
                 <Stat label="Avg holding" value={num(finalResult.metrics.avgHoldingBars, 1)} hint="bars" />
               </div>
-              <div className="mt-4 grid grid-cols-1 gap-4 text-xs text-(--color-fg-muted) sm:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-4 text-xs text-(--color-fg-muted) sm:grid-cols-4">
                 <span>Vol (annualised) <span className="text-(--color-fg)">{pct(finalResult.metrics.annualVol, 1)}</span></span>
                 <span>Costs paid <span className="text-(--color-fg)">{pct(finalResult.costsPaid, 2)}</span></span>
+                <span>CVaR 95% <span className="text-(--color-fg)">{pct(cvar95, 2)}</span></span>
                 <span>Total trades <span className="text-(--color-fg)">{finalResult.metrics.nTrades}</span></span>
               </div>
+              {boot ? (
+                <div className="mt-4 rounded-md border border-(--color-border) bg-(--color-card-soft) p-3 text-xs">
+                  <div className="mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-(--color-fg-faint)">
+                    bootstrap (300 resamples · stationary · block ≈ 21)
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-(--color-fg-muted)">
+                    <span>Median Sharpe <span className="text-(--color-fg)">{num(boot.sharpe.median, 2)}</span></span>
+                    <span>90% CI <span className="text-(--color-fg)">[{num(boot.sharpe.ci90[0], 2)}, {num(boot.sharpe.ci90[1], 2)}]</span></span>
+                    <span>95% CI <span className="text-(--color-fg)">[{num(boot.sharpe.ci95[0], 2)}, {num(boot.sharpe.ci95[1], 2)}]</span></span>
+                    <span>Median total <span className="text-(--color-fg)">{signedPct(boot.totalReturn.median, 0)}</span></span>
+                  </div>
+                </div>
+              ) : null}
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Equity curve</CardTitle>
+              <CardTitle>Equity curve vs benchmarks</CardTitle>
               <Badge tone="neutral">starting capital = 1.0</Badge>
             </CardHeader>
             <CardBody>
               <div style={{ width: "100%", height: 280 }}>
                 <ResponsiveContainer>
-                  <AreaChart data={equityRows} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+                  <ComposedChart data={benchmark} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
                     <defs>
                       <linearGradient id="eqfill" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="var(--color-accent)" stopOpacity={0.35} />
@@ -336,11 +405,20 @@ export function BacktestStudio() {
                     <YAxis tick={{ fontSize: 10 }} domain={["auto", "auto"]} />
                     <ReferenceLine y={1} stroke="var(--color-fg-faint)" strokeDasharray="3 3" />
                     <Tooltip />
-                    <Area type="monotone" dataKey="equity" stroke="var(--color-accent)" strokeWidth={1.5}
-                      fill="url(#eqfill)" isAnimationActive={false} />
-                  </AreaChart>
+                    <Area type="monotone" dataKey="bt" name="strategy"
+                      stroke="var(--color-accent)" strokeWidth={1.5} fill="url(#eqfill)" isAnimationActive={false} />
+                    <Line type="monotone" dataKey="bnh" name="buy &amp; hold A"
+                      stroke="var(--color-fg-faint)" strokeWidth={1.1} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="eql" name="equal-weight A+B"
+                      stroke="var(--color-info)" strokeWidth={1.1} dot={false} isAnimationActive={false} />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
+              <p className="mt-2 text-xs text-(--color-fg-muted)">
+                Pairs trading is a market-neutral strategy; the right benchmarks are 0%
+                and the equal-weight long-only basket — not the S&amp;P. Most pair Sharpes
+                look small until you compare to the blue line, which carries full market β.
+              </p>
             </CardBody>
           </Card>
 
@@ -479,6 +557,61 @@ export function BacktestStudio() {
               ) : null}
             </CardBody>
           </Card>
+
+          {tradeHeat ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Trade P&amp;L heatmap — entry-z × holding period</CardTitle>
+                <Badge tone="neutral">cell = avg fractional P&amp;L · count</Badge>
+              </CardHeader>
+              <CardBody className="overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr>
+                      <th className="text-left font-mono text-[10px] uppercase tracking-[0.14em] text-(--color-fg-faint)">entry-z \ bars</th>
+                      {tradeHeat.hLabels.map((h) => (
+                        <th key={h} className="px-1 py-1 text-center font-mono text-[10px] text-(--color-fg-muted)">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="font-mono">
+                    {tradeHeat.zLabels.map((z, zi) => (
+                      <tr key={z}>
+                        <td className="pr-2 text-right text-(--color-fg-muted)">{z}</td>
+                        {tradeHeat.grid[zi].map((cell, hi) => {
+                          const avg = cell.count > 0 ? cell.total / cell.count : null;
+                          const bg = avg == null ? "transparent" :
+                            avg >= 0
+                              ? `rgba(34, 197, 94, ${Math.min(0.55, Math.abs(avg) * 8)})`
+                              : `rgba(239, 68, 68, ${Math.min(0.55, Math.abs(avg) * 8)})`;
+                          return (
+                            <td key={hi}
+                                className="h-10 w-20 border border-(--color-bg)/30 px-1 text-center align-middle"
+                                style={{ background: bg }}
+                                title={cell.count > 0 ? `n=${cell.count} avg=${(avg!*100).toFixed(2)}%` : "n=0"}>
+                              {cell.count > 0 ? (
+                                <>
+                                  <div className="tabular text-(--color-fg)">{(avg!*100).toFixed(2)}%</div>
+                                  <div className="text-[9px] text-(--color-fg-faint)">n={cell.count}</div>
+                                </>
+                              ) : (
+                                <span className="text-(--color-fg-faint)">·</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-3 text-xs text-(--color-fg-muted)">
+                  Tells you which entry-z and holding-period buckets are profitable on this pair.
+                  Negative diagonal cells (deep z, long holding) typically expose stop-loss leakage;
+                  shallow-z + short-holding cells should look the strongest if mean reversion is working.
+                </p>
+              </CardBody>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>

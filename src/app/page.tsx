@@ -19,23 +19,47 @@ const modules = [
     title: "Pair Lab",
     icon: <Beaker size={16} />,
     summary:
-      "Pick a pair, watch OLS and Kalman fight over the hedge ratio, see the spread, ADF statistic and z-score live.",
+      "Pick a pair, watch OLS and Kalman fight over the hedge ratio, see the spread, z-score, rolling-ADF and Bertram-band overlay live.",
     tag: "interactive",
+  },
+  {
+    href: "/methods",
+    title: "Methods",
+    icon: <Sigma size={16} />,
+    summary:
+      "ADF + Engle-Granger + Johansen, KPSS (opposite null), Variance Ratio, Hurst, CUSUM — every test a desk runs before trusting a pair, side-by-side.",
+    tag: "diagnostics",
+  },
+  {
+    href: "/strategies",
+    title: "Strategies",
+    icon: <Layers size={16} />,
+    summary:
+      "Cointegration vs Distance method (Gatev-Goetzmann-Rouwenhorst) vs OU s-score (Avellaneda-Lee). Same pair, three trading rules, one chart.",
+    tag: "comparison",
   },
   {
     href: "/backtest",
     title: "Backtest Studio",
     icon: <BarChart3 size={16} />,
     summary:
-      "Walk-forward backtester with sliders for entry/exit, costs, slippage, exposure caps, drawdown limits and time-stops.",
+      "Walk-forward, every parameter tunable, costs baked into Sharpe, bootstrap CI, equity vs buy-and-hold, trade heatmap by entry-z × holding period.",
     tag: "tunable",
+  },
+  {
+    href: "/risk-lab",
+    title: "Risk Lab",
+    icon: <Beaker size={16} />,
+    summary:
+      "VaR / CVaR, Ulcer, Pain, Sterling, information ratio, return-distribution moments, stationary-bootstrap Sharpe CI on every pair.",
+    tag: "risk",
   },
   {
     href: "/portfolio",
     title: "Portfolio",
     icon: <Layers size={16} />,
     summary:
-      "Risk-parity sizing across pairs, β-to-market exposure, Amihud liquidity screens and a correlation-of-pairs heatmap.",
+      "Risk-parity sizing, β-to-market, Amihud liquidity + KPSS screens, capacity proxy and a correlation-of-pairs heatmap.",
     tag: "ensemble",
   },
   {
@@ -43,7 +67,7 @@ const modules = [
     title: "Theory",
     icon: <BookOpen size={16} />,
     summary:
-      "Engle-Granger, MacKinnon CVs, Kalman state space, OU half-life, Bertram bands, Maillard risk parity, Amihud illiquidity — all derived.",
+      "23 sections: Engle-Granger, Johansen/VECM, ADF, KPSS, VR, Hurst, CUSUM, Kalman, OU half-life, Bertram bands, distance, s-score, risk metrics, bootstrap.",
     tag: "math",
   },
   {
@@ -51,7 +75,7 @@ const modules = [
     title: "Glossary",
     icon: <Sigma size={16} />,
     summary:
-      "Quick definitions you can scan: cointegration, hedge ratio, z-score, half-life, Sharpe, drawdown, slippage and the rest.",
+      "Plain-English definitions for every term used elsewhere in the Lab.",
     tag: "reference",
   },
   {
@@ -59,7 +83,7 @@ const modules = [
     title: "Demo data",
     icon: <LineChart size={16} />,
     summary:
-      "Six synthetic pairs across six sectors. Strong, weak, structurally broken and independent — built so the math behaves the way the textbooks promise.",
+      "Twelve synthetic pairs across twelve sectors — strong, moderate, weak, slow, volatile, structurally broken, independent — each with its own seeded RNG.",
     tag: "deterministic",
   },
 ] as const;
@@ -255,6 +279,41 @@ export default function HomePage() {
                 t: "Liquidity",
                 a: "Amihud (2002)",
                 d: "Daily price-impact-per-dollar-of-volume measure. Used here to filter out pairs whose worse leg is too thin to trade.",
+              },
+              {
+                t: "Multivariate cointegration",
+                a: "Johansen (1988, 1991)",
+                d: "Trace and max-eigenvalue tests give the full rank of the cointegration space. The Methods page runs the 2-variable form against Osterwald-Lenum CVs.",
+              },
+              {
+                t: "Stationarity null",
+                a: "Kwiatkowski-Phillips-Schmidt-Shin (1992)",
+                d: "Reverses the ADF null. A pair worth trading rejects ADF and fails to reject KPSS — the Lab requires both.",
+              },
+              {
+                t: "Random walk null",
+                a: "Lo & MacKinlay (1988)",
+                d: "Variance ratio test with heteroskedasticity-robust z. The Methods page reports VR(q) at six horizons from 2 to 64.",
+              },
+              {
+                t: "Self-similarity",
+                a: "Hurst (1951), Mandelbrot (1969)",
+                d: "Rescaled-range slope tells you whether a series is mean-reverting (H<0.5), random (H=0.5), or trending (H>0.5).",
+              },
+              {
+                t: "Structural breaks",
+                a: "Brown, Durbin & Evans (1975)",
+                d: "CUSUM of recursive residuals with Brownian-motion bands. The Lab's primary breakdown-warning system.",
+              },
+              {
+                t: "Tail risk",
+                a: "Rockafellar & Uryasev (2002)",
+                d: "Conditional VaR / Expected Shortfall — coherent risk measure used throughout the Risk Lab.",
+              },
+              {
+                t: "Bootstrap",
+                a: "Politis & Romano (1994)",
+                d: "Stationary bootstrap with geometric block lengths. Honest standard errors on Sharpe under serial correlation.",
               },
             ].map((c) => (
               <div

@@ -9,7 +9,10 @@ const ROUTES = [
   { href: "/", label: "Home" },
   { href: "/theory", label: "Theory" },
   { href: "/pair-lab", label: "Pair Lab" },
+  { href: "/methods", label: "Methods" },
+  { href: "/strategies", label: "Strategies" },
   { href: "/backtest", label: "Backtest" },
+  { href: "/risk-lab", label: "Risk" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/glossary", label: "Glossary" },
 ];
@@ -28,7 +31,7 @@ export function Nav() {
             <span className="text-(--color-fg-muted)">-lab</span>
           </span>
         </Link>
-        <nav className="hidden gap-1 md:flex">
+        <nav className="hidden gap-1 lg:flex">
           {ROUTES.map((r) => {
             const active =
               r.href === "/" ? pathname === "/" : pathname.startsWith(r.href);
@@ -37,7 +40,7 @@ export function Nav() {
                 key={r.href}
                 href={r.href}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
                   active
                     ? "bg-(--color-card-soft) text-(--color-fg)"
                     : "text-(--color-fg-muted) hover:text-(--color-fg)"

@@ -33,8 +33,20 @@ export interface PairSpec {
   id: string;
   symbolA: string;
   symbolB: string;
-  sector: "Banks" | "Tech" | "Energy" | "Consumer" | "Healthcare" | "Industrials";
-  tag: "Strong" | "Moderate" | "Weak" | "Broken" | "Independent";
+  sector:
+    | "Banks"
+    | "Tech"
+    | "Energy"
+    | "Consumer"
+    | "Healthcare"
+    | "Industrials"
+    | "REITs"
+    | "Utilities"
+    | "Materials"
+    | "Comms"
+    | "Semis"
+    | "Insurance";
+  tag: "Strong" | "Moderate" | "Weak" | "Broken" | "Independent" | "Volatile" | "Slow";
   truth: { alpha: number; ouTheta: number; ouSigma: number; regimeBreak?: number };
   description: string;
 }
@@ -161,6 +173,48 @@ const PAIR_SPECS: PairSpec[] = [
     truth: { alpha: 1.0, ouTheta: 0.0, ouSigma: 0.0 },
     description: "Two healthcare names with no shared latent factor. Should fail cointegration tests — included to verify the filter rejects bad pairs.",
   },
+  {
+    id: "QUARK-LEPTON",
+    symbolA: "QUARK", symbolB: "LEPTN",
+    sector: "Semis", tag: "Strong",
+    truth: { alpha: 1.0, ouTheta: 0.10, ouSigma: 0.025 },
+    description: "Two leading semiconductor designers with shared cyclical exposure. Fast (~7 day) half-life and the highest SNR in the universe.",
+  },
+  {
+    id: "PRISM-ARRAY",
+    symbolA: "PRISM", symbolB: "ARRAY",
+    sector: "Comms", tag: "Volatile",
+    truth: { alpha: 1.05, ouTheta: 0.07, ouSigma: 0.038 },
+    description: "Comms-services pair with high diffusion. Wider bands needed; great test for cost sensitivity.",
+  },
+  {
+    id: "ROOK-PAWN",
+    symbolA: "ROOK", symbolB: "PAWN",
+    sector: "REITs", tag: "Slow",
+    truth: { alpha: 1.0, ouTheta: 0.012, ouSigma: 0.014 },
+    description: "Two large mall REITs. Slow mean reversion (~58 day half-life) — borderline for daily-bar strategies; ideal stress test for half-life filter.",
+  },
+  {
+    id: "AMP-VOLT",
+    symbolA: "AMP",  symbolB: "VOLT",
+    sector: "Utilities", tag: "Strong",
+    truth: { alpha: 0.92, ouTheta: 0.06, ouSigma: 0.013 },
+    description: "Two regulated utilities. Modest diffusion, clean cointegration; rates-sensitive but β-hedged within the pair.",
+  },
+  {
+    id: "FERRO-CUPRO",
+    symbolA: "FERR", symbolB: "CUPR",
+    sector: "Materials", tag: "Moderate",
+    truth: { alpha: 1.08, ouTheta: 0.025, ouSigma: 0.030 },
+    description: "Iron-ore and copper miners. Commodity-cyclical; cointegrated but volatile, ~28 day half-life.",
+  },
+  {
+    id: "GUARD-WALL",
+    symbolA: "GUARD", symbolB: "WALL",
+    sector: "Insurance", tag: "Moderate",
+    truth: { alpha: 1.02, ouTheta: 0.04, ouSigma: 0.018, regimeBreak: 0.78 },
+    description: "P&C insurers. Stable for most of sample, late mild break to test rolling diagnostics — different test case from PYRE-VALE's early structural break.",
+  },
 ];
 
 export function listPairSpecs(): PairSpec[] {
@@ -205,28 +259,36 @@ export function buildUniverse(opts: BuildOpts = {}): DemoUniverse {
     Consumer:     sectorFactor(0.65, 0.07),
     Healthcare:   sectorFactor(0.75, 0.09),
     Industrials:  sectorFactor(1.00, 0.11),
+    REITs:        sectorFactor(0.55, 0.12),
+    Utilities:    sectorFactor(0.45, 0.07),
+    Materials:    sectorFactor(1.15, 0.20),
+    Comms:        sectorFactor(1.00, 0.15),
+    Semis:        sectorFactor(1.45, 0.22),
+    Insurance:    sectorFactor(0.70, 0.08),
   };
 
   // Build each pair from its sector factor + OU spread (or independent walks for the negative example).
+  // Each pair gets its own seeded sub-RNG so adding pairs later does not perturb the existing ones.
   const pairs: PairData[] = PAIR_SPECS.map((spec) => {
+    const pairRng = seedrandom(`${seed}::${spec.id}`);
     const F = sectorMap[spec.sector];
     let logA: number[];
     let logB: number[];
 
     if (spec.tag === "Independent") {
       // Two independent random walks with mild drift — same sector factor influence is intentionally absent.
-      logA = gbm(rng, nBars, 0.04 / TRADING_DAYS_PER_YEAR, 0.22 / Math.sqrt(TRADING_DAYS_PER_YEAR));
-      logB = gbm(rng, nBars, 0.05 / TRADING_DAYS_PER_YEAR, 0.24 / Math.sqrt(TRADING_DAYS_PER_YEAR));
+      logA = gbm(pairRng, nBars, 0.04 / TRADING_DAYS_PER_YEAR, 0.22 / Math.sqrt(TRADING_DAYS_PER_YEAR));
+      logB = gbm(pairRng, nBars, 0.05 / TRADING_DAYS_PER_YEAR, 0.24 / Math.sqrt(TRADING_DAYS_PER_YEAR));
     } else {
-      const sAB = ou(rng, nBars, spec.truth.ouTheta, 0, spec.truth.ouSigma);
+      const sAB = ou(pairRng, nBars, spec.truth.ouTheta, 0, spec.truth.ouSigma);
       // Stationary level noise (NOT cumulative). Tiny per-bar shocks so log-prices keep most of
       // their structure from the sector factor + OU spread, with realistic measurement noise.
       const epsLvlSigma = 0.012;
       const epsA = new Array<number>(nBars);
       const epsB = new Array<number>(nBars);
       for (let i = 0; i < nBars; i++) {
-        epsA[i] = epsLvlSigma * gaussian(rng);
-        epsB[i] = epsLvlSigma * gaussian(rng);
+        epsA[i] = epsLvlSigma * gaussian(pairRng);
+        epsB[i] = epsLvlSigma * gaussian(pairRng);
       }
       // logA shares F directly; logB is scaled by 1/α so that (logA − α·logB) cancels F.
       // For α=1 this collapses to the natural "shared sector" formulation.
@@ -234,36 +296,36 @@ export function buildUniverse(opts: BuildOpts = {}): DemoUniverse {
       logA = F.map((f, i) => f + sAB[i] + epsA[i]);
       logB = F.map((f, i) => inv * f + epsB[i]);
 
-      if (spec.tag === "Broken" && spec.truth.regimeBreak) {
+      if ((spec.tag === "Broken" || (spec.truth.regimeBreak && spec.tag === "Moderate")) && spec.truth.regimeBreak) {
         // After the break, B accumulates a divergent random walk so the cointegration relationship
         // collapses. A live test of breakdown filters.
         const breakIdx = Math.floor(nBars * spec.truth.regimeBreak);
-        const drift = 0.30 / Math.sqrt(TRADING_DAYS_PER_YEAR); // strong post-break diffusion
+        const drift = (spec.tag === "Broken" ? 0.30 : 0.15) / Math.sqrt(TRADING_DAYS_PER_YEAR);
         let extra = 0;
         for (let i = breakIdx; i < nBars; i++) {
-          extra += drift * gaussian(rng) + 0.0008; // upward drift in B detaches the relationship
+          extra += drift * gaussian(pairRng) + 0.0008; // upward drift in B detaches the relationship
           logB[i] += extra;
         }
       }
     }
 
     // Anchor levels with realistic starting prices and dollar volumes.
-    const startA = 50 + Math.floor(rng() * 80);
-    const startB = 40 + Math.floor(rng() * 70);
+    const startA = 50 + Math.floor(pairRng() * 80);
+    const startB = 40 + Math.floor(pairRng() * 70);
     const pricesA = pricesFromLog(startA, logA);
     const pricesB = pricesFromLog(startB, logB);
 
-    const vols = (target: number, vol: number) => makeVolume(rng, nBars, target, vol);
+    const vols = (target: number, vol: number) => makeVolume(pairRng, nBars, target, vol);
     const a: BarSeries = {
       dates,
       prices: pricesA,
-      volumes: vols(2_500_000 + Math.floor(rng() * 5_000_000), 0.35),
+      volumes: vols(2_500_000 + Math.floor(pairRng() * 5_000_000), 0.35),
       logReturns: diff(logA),
     };
     const b: BarSeries = {
       dates,
       prices: pricesB,
-      volumes: vols(2_500_000 + Math.floor(rng() * 5_000_000), 0.35),
+      volumes: vols(2_500_000 + Math.floor(pairRng() * 5_000_000), 0.35),
       logReturns: diff(logB),
     };
     return { spec, a, b };

@@ -18,6 +18,8 @@ import { runBacktest, DEFAULT_PARAMS, type BacktestResult } from "@/lib/backtest
 import { engleGranger } from "@/lib/math/cointegration";
 import { fitOu } from "@/lib/math/ou";
 import { ols } from "@/lib/math/ols";
+import { kpssTest } from "@/lib/math/kpss";
+import { conditionalVaR, ulcerIndex } from "@/lib/risk/metrics";
 import {
   betaToBenchmark,
   correlationMatrix,
@@ -68,10 +70,17 @@ export function Portfolio() {
       let bt: BacktestResult | null = null;
       try { bt = runBacktest(pair, DEFAULT_PARAMS); } catch { bt = null; }
       const amihud = pairAmihud(pair);
-      // β to market on daily log returns of leg A (proxy for the pair-level book β)
       const mktRet = universe.market.logReturns;
       const betaToMkt = betaToBenchmark(pair.a.logReturns, mktRet);
-      return { pair, eg, ouFit, fullOls, bt, amihud, betaToMkt };
+      // Extended risk: KPSS for the spread, CVaR/Ulcer on the strategy returns, capacity proxy.
+      const kpss = kpssTest(spread, "level");
+      const cvar95 = bt ? conditionalVaR(bt.dailyReturn, 0.05) : 0;
+      const ulcer = bt ? ulcerIndex(bt.equity) : 0;
+      // Naive capacity: 1% of average daily dollar volume on the worse leg, in $.
+      const dvolA = pair.a.prices.reduce((s, p, i) => s + p * pair.a.volumes[i], 0) / pair.a.prices.length;
+      const dvolB = pair.b.prices.reduce((s, p, i) => s + p * pair.b.volumes[i], 0) / pair.b.prices.length;
+      const capacityUsd = 0.01 * Math.min(dvolA, dvolB);
+      return { pair, eg, ouFit, fullOls, bt, amihud, betaToMkt, kpss, cvar95, ulcer, capacityUsd };
     });
   }, [universe]);
 
@@ -255,21 +264,28 @@ export function Portfolio() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Pair-by-pair table</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Pair-by-pair table</CardTitle>
+          <Badge tone="neutral">extended risk + capacity</Badge>
+        </CardHeader>
         <CardBody className="overflow-auto p-0">
-          <table className="w-full table-fixed text-xs">
+          <table className="w-full text-xs">
             <thead className="bg-(--color-card-soft) text-left font-mono text-[10.5px] uppercase tracking-[0.14em] text-(--color-fg-faint)">
               <tr>
-                <th className="w-[14%] px-4 py-2.5">Pair</th>
-                <th className="w-[10%] px-4 py-2.5">Sector</th>
-                <th className="w-[8%] px-4 py-2.5">β (OLS)</th>
-                <th className="w-[8%] px-4 py-2.5">Coint?</th>
-                <th className="w-[8%] px-4 py-2.5">½-life</th>
-                <th className="w-[8%] px-4 py-2.5">Amihud</th>
-                <th className="w-[8%] px-4 py-2.5">βmkt</th>
-                <th className="w-[8%] px-4 py-2.5">Sharpe</th>
-                <th className="w-[8%] px-4 py-2.5">Total</th>
-                <th className="w-[10%] px-4 py-2.5">Status</th>
+                <th className="px-3 py-2.5">Pair</th>
+                <th className="px-3 py-2.5">Sector</th>
+                <th className="px-3 py-2.5">β</th>
+                <th className="px-3 py-2.5">Coint</th>
+                <th className="px-3 py-2.5">KPSS</th>
+                <th className="px-3 py-2.5">½-life</th>
+                <th className="px-3 py-2.5">Amihud</th>
+                <th className="px-3 py-2.5">βmkt</th>
+                <th className="px-3 py-2.5">Sharpe</th>
+                <th className="px-3 py-2.5">CVaR95</th>
+                <th className="px-3 py-2.5">Ulcer</th>
+                <th className="px-3 py-2.5">Cap $</th>
+                <th className="px-3 py-2.5">Total</th>
+                <th className="px-3 py-2.5">Status</th>
               </tr>
             </thead>
             <tbody className="font-mono">
@@ -277,28 +293,28 @@ export function Portfolio() {
                 const passes = filtered.includes(s);
                 return (
                   <tr key={s.pair.spec.id} className="border-t border-(--color-border)">
-                    <td className="px-4 py-2 text-(--color-fg)">
+                    <td className="px-3 py-2 text-(--color-fg)">
                       {s.pair.spec.symbolA}<span className="text-(--color-fg-faint)">/</span>{s.pair.spec.symbolB}
                     </td>
-                    <td className="px-4 py-2 text-(--color-fg-muted)">{s.pair.spec.sector}</td>
-                    <td className="px-4 py-2 tabular text-(--color-fg)">{num(s.fullOls.beta, 3)}</td>
-                    <td className="px-4 py-2 tabular">
-                      {s.eg.isCointegrated5 ? (
-                        <span className="text-(--color-good)">yes</span>
-                      ) : (
-                        <span className="text-(--color-bad)">no</span>
-                      )}
+                    <td className="px-3 py-2 text-(--color-fg-muted)">{s.pair.spec.sector}</td>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">{num(s.fullOls.beta, 2)}</td>
+                    <td className="px-3 py-2 tabular">
+                      {s.eg.isCointegrated5 ? <span className="text-(--color-good)">✔</span> : <span className="text-(--color-bad)">✘</span>}
                     </td>
-                    <td className="px-4 py-2 tabular text-(--color-fg)">
-                      {s.ouFit.halfLife ? num(s.ouFit.halfLife, 1) : "—"}
+                    <td className="px-3 py-2 tabular">
+                      {!s.kpss.reject5 ? <span className="text-(--color-good)">✔</span> : <span className="text-(--color-bad)">✘</span>}
                     </td>
-                    <td className="px-4 py-2 tabular text-(--color-fg)">{num(s.amihud, 2)}</td>
-                    <td className="px-4 py-2 tabular text-(--color-fg)">{num(s.betaToMkt, 2)}</td>
-                    <td className="px-4 py-2 tabular text-(--color-fg)">{s.bt ? num(s.bt.metrics.sharpe, 2) : "—"}</td>
-                    <td className={`px-4 py-2 tabular ${s.bt && s.bt.metrics.totalReturn >= 0 ? "text-(--color-good)" : "text-(--color-bad)"}`}>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">{s.ouFit.halfLife ? num(s.ouFit.halfLife, 1) : "—"}</td>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">{num(s.amihud, 2)}</td>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">{num(s.betaToMkt, 2)}</td>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">{s.bt ? num(s.bt.metrics.sharpe, 2) : "—"}</td>
+                    <td className="px-3 py-2 tabular text-(--color-bad)">{pct(s.cvar95, 2)}</td>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">{num(s.ulcer, 4)}</td>
+                    <td className="px-3 py-2 tabular text-(--color-fg)">${(s.capacityUsd / 1e6).toFixed(1)}M</td>
+                    <td className={`px-3 py-2 tabular ${s.bt && s.bt.metrics.totalReturn >= 0 ? "text-(--color-good)" : "text-(--color-bad)"}`}>
                       {s.bt ? signedPct(s.bt.metrics.totalReturn, 1) : "—"}
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-3 py-2">
                       {passes ? (
                         <Badge tone="good">in book</Badge>
                       ) : !s.eg.isCointegrated5 ? (
@@ -314,6 +330,12 @@ export function Portfolio() {
               })}
             </tbody>
           </table>
+          <p className="px-4 py-3 text-[11px] text-(--color-fg-muted)">
+            Capacity is a conservative proxy: 1% of the mean dollar volume on the worse leg.
+            Real-money trading should size against actual ADV percentage and impact-curve
+            estimates (Almgren-Chriss). KPSS column shows ✔ when the spread fails to reject
+            stationarity at 5% — a complementary stamp to the Engle-Granger column.
+          </p>
         </CardBody>
       </Card>
 

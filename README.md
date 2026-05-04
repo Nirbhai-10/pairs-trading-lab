@@ -22,10 +22,13 @@ Every number is computed live in the browser from a deterministic synthetic univ
 | Route | What it does |
 | --- | --- |
 | `/` | Hero, animated pipeline infographic, module index, paper citations. |
-| `/theory` | Engle-Granger, ADF, MacKinnon CVs, OLS, Kalman, OU half-life, Bertram bands, risk parity, β-hedging, Amihud, walk-forward. |
-| `/pair-lab` | Pick a pair and explore prices, hedge ratios (3 estimators), spread, z-score, rolling-window ADF p-value and z-score distribution. |
-| `/backtest` | Sliders for every parameter; live equity curve, drawdown panel, z-score-with-positions overlay, trade ledger. |
-| `/portfolio` | Multi-pair book with risk-parity sizing, β-to-market exposure, liquidity and half-life screens, correlation heatmap. |
+| `/theory` | 23 sections: Engle-Granger, ADF + MacKinnon, Johansen + VECM, KPSS, Variance Ratio, Hurst, CUSUM, OLS / rolling / Kalman, OU half-life, Bertram, distance method, Avellaneda-Lee s-score, risk parity, β-hedging, Amihud, walk-forward, extended risk metrics, stationary bootstrap, capacity. |
+| `/pair-lab` | Pick a pair and explore prices, hedge ratios (3 estimators), spread, z-score, rolling-window ADF p-value, z-score distribution and Bertram-band optimisation surface. |
+| `/methods` | One-screen diagnostics: ADF + Engle-Granger + Johansen + KPSS + Variance Ratio + Hurst + CUSUM + half-life sensitivity. |
+| `/strategies` | Side-by-side: cointegration, distance method (Gatev-Goetzmann-Rouwenhorst), OU s-score (Avellaneda-Lee). Same pair, three rules, one chart. |
+| `/backtest` | Sliders for every parameter; equity vs buy-and-hold and equal-weight, drawdown panel, z-with-positions overlay, trade ledger, **bootstrap CI on Sharpe**, **trade-PnL heatmap by entry-z × holding period**. |
+| `/risk-lab` | VaR / CVaR (95 %, 99 %), Ulcer Index, Pain Ratio, Sterling, Information Ratio, return-distribution moments, stationary-bootstrap Sharpe distribution. |
+| `/portfolio` | 12-pair book with risk-parity sizing, β-to-market exposure, KPSS + Amihud + half-life screens, capacity proxy, correlation-of-pairs heatmap. |
 | `/glossary` | Plain-English definitions for every term used elsewhere in the Lab. |
 
 ## Architecture
@@ -49,10 +52,27 @@ All math runs client-side; there are no server routes, no databases, no external
 - `ols.ts` — simple OLS, multiple OLS via `(XᵀX)⁻¹Xᵀy`, fast online rolling OLS.
 - `adf.ts` — augmented Dickey-Fuller with intercept, MacKinnon (1996) finite-sample CVs and approximate p-values; rolling-window variant for breakdown filters.
 - `cointegration.ts` — Engle-Granger two-step, MacKinnon (2010) cointegration CVs.
+- `johansen.ts` — Johansen (1988, 1991) trace + max-eigenvalue, 2-variable form, Osterwald-Lenum (1992) CVs, cointegration vector recovery.
+- `kpss.ts` — KPSS (Kwiatkowski-Phillips-Schmidt-Shin 1992) with Newey-West long-run variance and Andrews (1991) bandwidth.
+- `varianceratio.ts` — Lo & MacKinlay (1988) with heteroskedasticity-robust z\*.
+- `hurst.ts` — Hurst exponent via Mandelbrot-Wallis R/S analysis.
+- `cusum.ts` — Brown, Durbin & Evans (1975) CUSUM with Brownian-motion bands.
 - `kalman.ts` — 2-state filter for time-varying (α, β); textbook recursive form following Chan (2013).
-- `ou.ts` — AR(1) fit on the spread, half-life closed form, Bertram band scan.
-- `linalg.ts` — Gauss-Jordan solve and inverse for small matrices used by multi-OLS.
+- `ou.ts` — AR(1) fit on the spread, half-life closed form.
+- `bertram.ts` — Bertram (2010) optimal entry/exit threshold via expected-hitting-time series.
+- `halflife_window.ts` — half-life sensitivity to window length.
+- `linalg.ts` — Gauss-Jordan solve and inverse, 2×2 specialised eigenvalue.
 - `stats.ts` — Sharpe, Sortino, max drawdown, CAGR, Calmar, rolling mean / std.
+
+### Strategies
+- `backtest/engine.ts` — cointegration + rolling z-score (default).
+- `strategies/distance.ts` — Gatev-Goetzmann-Rouwenhorst formation/trading windows.
+- `strategies/sscore.ts` — Avellaneda-Lee single-factor s-score.
+
+### Risk
+- `risk/sizing.ts` — inverse-vol, risk-parity (ERC), β-to-benchmark, Amihud illiquidity, correlation matrix, portfolio covariance.
+- `risk/metrics.ts` — VaR, CVaR/ES, Ulcer Index, Pain Ratio, Sterling, Information Ratio, return moments, max losing streak.
+- `risk/bootstrap.ts` — Politis-Romano stationary bootstrap with geometric block lengths.
 
 ### Backtest engine
 - Cost-aware: every cost is baked into daily returns so equity, Sharpe and the trade ledger agree.
