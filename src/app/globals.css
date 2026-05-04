@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #07080a;
+  --color-bg-soft: #0c0d10;
+  --color-card: #101116;
+  --color-card-soft: #15161c;
+  --color-border: #21232c;
+  --color-border-strong: #2c2f3a;
+  --color-fg: #ebecf0;
+  --color-fg-muted: #9ca0ad;
+  --color-fg-faint: #6b6f7d;
+  --color-accent: #f5a524;
+  --color-accent-soft: #f5a52414;
+  --color-good: #22c55e;
+  --color-bad: #ef4444;
+  --color-info: #38bdf8;
+
+  --font-sans: var(--font-geist-sans), "Inter", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "JetBrains Mono", ui-monospace, monospace;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*::selection {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* KaTeX dark-surface tweaks */
+.katex {
+  color: var(--color-fg);
+  font-size: 1.05em;
+}
+.katex-display {
+  margin: 1.1em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.4em 0.2em;
+}
+
+/* Slim scrollbars */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border-strong); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-fg-faint); }
+
+/* Subtle grid background */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.bg-grid-dense {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* Recharts overrides */
+.recharts-default-tooltip {
+  background: var(--color-card) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius) !important;
+}
+.recharts-cartesian-axis-tick-value {
+  fill: var(--color-fg-muted) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+}
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--color-border) !important;
+}
+.recharts-tooltip-label { color: var(--color-fg) !important; }
+.recharts-legend-item-text { color: var(--color-fg-muted) !important; }
+
+/* Number ticker */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
